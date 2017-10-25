@@ -15,7 +15,6 @@ def gen_dark_channel(img, window):
         channel_dark[r,c] = np.min(pad_img[r:r + window, c:c + window, :])
     return channel_dark
 
-#TODO: Test the following, and replace faster_dark_channel with gen_dark_channel
 def faster_dark_channel(img, kernel):
     print "Evaluating dark channel"
     temp = np.amin(img, axis = 2)
