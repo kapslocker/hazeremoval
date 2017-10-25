@@ -8,7 +8,6 @@ def gen_dark_channel(img, window):
     '''pad image at the ends with a square of side window/2 to get minimum comparision at the ends'''
     pad_img = np.pad(img, ((window/2,window/2), (window/2, window/2), (0,0)), 'edge')
     print "Generating dark image..."
-    #TODO: This is a slow operation to find minimum, devise a faster method that doesn't need iteration over all pixels explicitly
     sh = (R,C)
     channel_dark = np.zeros(sh)
     count = 0
@@ -16,12 +15,17 @@ def gen_dark_channel(img, window):
         channel_dark[r,c] = np.min(pad_img[r:r + window, c:c + window, :])
     return channel_dark
 
+#TODO: Test the following, and replace faster_dark_channel with gen_dark_channel
+def faster_dark_channel(img, kernel):
+    print "Evaluating dark channel"
+    temp = np.amin(img, axis = 2)
+    return cv2.erode(temp, kernel)
 
-def atmosphere(img, channel_dark, thres_percent):
+def atmosphere(img, channel_dark, top_percent):
     R, C, D = img.shape
     # flatten dark to get top thres percentage of bright points. Paper uses thres_percent = 0.1
     flat_dark = channel_dark.ravel()
-    req = int((R * C * thres_percent)/ 100)
+    req = int((R * C * top_percent)/ 100)
     ''' find indices of top req intensites in dark channed'''
     indices = np.argpartition(flat_dark, -req)[-req:]
 
@@ -29,47 +33,44 @@ def atmosphere(img, channel_dark, thres_percent):
     flat_img = img.reshape(R * C,3)
     return np.max(flat_img.take(indices, axis = 0), axis = 0)
 
-def eval_transmission(dark_div, param, min_thres):
+def eval_transmission(dark_div, param):
     '''returns the estimated transmission'''
     transmission = 1 - param * dark_div
-    return np.maximum(transmission, min_thres )
+    return transmission
 
 def depth_map(trans, beta):
     return -np.log(trans)/beta
 
-def radiant_image(image, atmosphere, t):
+def radiant_image(image, atmosphere, t, thres):
     R,C,D = image.shape
     temp = np.empty(image.shape)
     for i in xrange(D):
         temp[:,:,i] = t
-    return (image - atmosphere)/temp + atmosphere
+    return (image - atmosphere)/np.maximum(temp, thres) + atmosphere
 
 
-window = 15
-thres_percent = 0.2
-omega = 0.95
-beta = 1.0
+def automate(orig_img, window = 15, top_percent = 0.1, thres_haze = 0.1, omega = 0.95, beta = 1.0):
+    img = np.asarray(orig_img, dtype = np.float64)
+    #dark = gen_dark_channel(img, window)
+    kernel = np.ones((window, window), np.float64)
+    dark = faster_dark_channel(img,kernel)
 
-orig_img = cv2.imread('manish.jpg')
-img = np.asarray(orig_img, dtype = np.float64)
-dark = gen_dark_channel(img, window)
+    A = atmosphere(img, dark, top_percent)
 
-A = atmosphere(img, dark, omega)
+    B = img / A
 
-B = img / A
+    #dark_div = gen_dark_channel(B, window)
+    dark_div = faster_dark_channel(B, kernel)
+    t_estimate = eval_transmission(dark_div, omega)
+    unhazed = radiant_image(img, A, t_estimate, thres_haze)
+    return [np.array(x, dtype = np.uint8) for x in [t_estimate * 255, unhazed] ]
 
-dark_div = gen_dark_channel(B, window)
-t_estimate = eval_transmission(dark_div, omega, thres_percent)
 
-unhazed = radiant_image(img, A, t_estimate)
-# Outputs:
-# dark_image = np.array(dark, dtype = np.uint8)
-# cv2.imshow('dark_image', dark_image)
-# cv2.waitKey(0)
-# cv2.destroyAllWindows()
-
-temp = np.array(unhazed, dtype = np.uint8)
-cv2.imshow('original', orig_img)
-cv2.imwrite('unhazed.jpg',temp)
+img = cv2.imread('input.png')
+#img = cv2.imread('foggy.jpg')
+#img = cv2.imread('manish.jpg')
+[trans, radiance] = automate(img)
+cv2.imshow('original', img)
+cv2.imshow('unhazed',radiance)
+cv2.imshow('transmission', trans)
 cv2.waitKey(0)
-cv2.destroyAllWindows()
