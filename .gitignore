@@ -2,3 +2,4 @@
 *.png
 *.swp
 *.pyc
+images/*
