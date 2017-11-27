@@ -1,5 +1,8 @@
 *.jpg
 *.png
 *.swp
+*.bmp
 *.pyc
+*.zip
+*.mp4
 images/*
