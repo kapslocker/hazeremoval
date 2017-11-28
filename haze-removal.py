@@ -113,7 +113,8 @@ def bug_guided_filter(img, p, r, eps):
 
 
 def depth_map(trans, beta):
-    return -np.log(trans)/beta
+    rval = -np.log(trans)/beta
+    return rval / np.max(rval)
 
 def radiant_image(image, atmosphere, t, thres):
     R,C,D = image.shape
@@ -126,7 +127,7 @@ def radiant_image(image, atmosphere, t, thres):
     return b
 
 
-def perform(orig_img, window = 25, top_percent = 0.1, thres_haze = 0.1, omega = 0.95, beta = 1.0, radius = 20, eps = 0.0001):
+def perform(orig_img, window = 50, top_percent = 0.1, thres_haze = 0.1, omega = 0.95, beta = 1.0, radius = 100, eps = 0.001):
     img_gray = cv2.cvtColor(orig_img, cv2.COLOR_BGR2GRAY)
     img = np.asarray(orig_img, dtype = np.float64)
     img_norm = (img_gray - img_gray.mean())/(img_gray.max() - img_gray.min())
@@ -141,26 +142,29 @@ def perform(orig_img, window = 25, top_percent = 0.1, thres_haze = 0.1, omega = 
     t_refined = guidedfilter(img_norm, t_estimate, radius, eps)
     # t_refined = fast_guided_filter(img, t_estimate, radius, eps)
     unhazed = radiant_image(img, A, t_refined, thres_haze)
-    return [np.array(x, dtype = np.uint8) for x in [t_estimate * 255, t_refined * 255, unhazed, dark] ]
+    depthmap = depth_map(t_refined, beta)
+    return [np.array(x, dtype = np.uint8) for x in [t_estimate * 255, t_refined * 255, unhazed, dark, depthmap * 255] ]
 
 
 def run_file(fileName):
     frame = cv2.imread(fileName)
-    [trans, trans_refined, radiance, dark] = perform(frame)
-    cv2.imshow('original', frame)
+    [trans, trans_refined, radiance, dark, depthmap] = perform(frame)
+    # cv2.imshow('original.jpg', frame)
     cv2.imshow('unhazed', radiance)
-    cv2.imshow('transmission', trans_refined)
-    cv2.imshow('dark-channel', dark)
+    cv2.imwrite('unhazed.jpg', radiance)
+    cv2.imwrite('transmission.jpg', trans_refined)
+    cv2.imwrite('dark-channel.jpg', dark)
+    cv2.imwrite('depthmap.jpg', depthmap)
     cv2.waitKey(0)
 
 def run_vid(fileName):
     cap = cv2.VideoCapture(fileName)
     while(1):
         ret, img = cap.read()
-        [trans, trans_refined, radiance, dark] = automate(img)
+        [trans, trans_refined, radiance, dark] = perform(img)
         cv2.imshow('original', img)
         cv2.imshow('unhazed', radiance)
         cv2.imshow('transmission', trans_refined)
         cv2.waitKey(30)
-
-run_file('images/iit2.jpeg')
+# run_vid('vid.mp4')
+run_file('images/input.png')
