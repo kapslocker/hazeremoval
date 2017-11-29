@@ -9,4 +9,4 @@ This was implemented as a part of the course **COL780** on **Computer Vision** d
 [Guided Image Filter](http://kaiminghe.com/publications/pami12guidedfilter.pdf)
 
 ## Example 
-TODO: Insert here
+![Demo](https://github.com/kapslocker/hazeremoval/raw/master/save.png)
