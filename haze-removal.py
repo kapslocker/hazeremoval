@@ -1,14 +1,16 @@
+"""Haze removal module."""
+
 import numpy as np
 import cv2
 
 
-
 def gen_dark_channel(img, window):
-    ''' Implementation of the method used in the paper'''
-    '''get image size and num_channels'''
+    """Generate dark channel for provided image in patches of size window."""
+    # get image size and num_channels
     R,C,D = img.shape
-    '''pad image at the ends with a square of side window/2 to get minimum comparision at the ends'''
-    pad_img = np.pad(img, ((window/2,window/2), (window/2, window/2), (0,0)), 'edge')
+    # pad image at the ends with a square of side window/2
+    pad_img = np.pad(img, ((window/2,window/2),
+                     (window/2, window/2), (0,0)), 'edge')
     print "Generating dark image..."
     sh = (R,C)
     channel_dark = np.zeros(sh)
@@ -19,7 +21,7 @@ def gen_dark_channel(img, window):
 
 
 def boxfilter(img, r):
-    ''' To be used for the guided filter '''
+    """Mean blur the provided image."""
     (rows, cols) = img.shape
     imDst = np.zeros_like(img)
 
@@ -37,7 +39,7 @@ def boxfilter(img, r):
 
 
 def guidedfilter(I, p, r, eps):
-    ''' Filters p, guided by the image I. Uses r for the box filter radius'''
+    """Filter p, guided by the image I using r as the box filter radius."""
     (rows, cols) = I.shape
     N = boxfilter(np.ones([rows, cols]), r)
 
@@ -60,29 +62,37 @@ def guidedfilter(I, p, r, eps):
 
 
 def faster_dark_channel(img, kernel):
-    '''Method to evaluate the dark channel faster'''
-    print "Evaluating dark channel"
+    """Faster method to generate the dark channel."""
+    print "Evaluating dark channel..."
     temp = np.amin(img, axis = 2)
     return cv2.erode(temp, kernel)
 
+
 def atmosphere(img, channel_dark, top_percent):
+    """Get atmosphere component in haze modeling equation."""
     R, C, D = img.shape
-    # flatten dark to get top thres percentage of bright points. Paper uses thres_percent = 0.1
+    # flatten dark to get top thres percentage of bright points.
     flat_dark = channel_dark.ravel()
     req = int((R * C * top_percent)/ 100)
-    ''' find indices of top req intensites in dark channed'''
+    # find indices of top req intensites in dark channed
     indices = np.argpartition(flat_dark, -req)[-req:]
 
-    '''flatten image and take max among these pixels '''
+    # flatten image and take max among these pixels
     flat_img = img.reshape(R * C,3)
     return np.max(flat_img.take(indices, axis = 0), axis = 0)
 
+
 def eval_transmission(dark_div, param):
-    '''returns the estimated transmission'''
+    """Evaluate coarse transmission map from dark channel."""
     transmission = 1 - param * dark_div
     return transmission
 
+
 def bug_guided_filter(img, p, r, eps):
+    """Alternate implementation for guided filter.
+
+    Note: This has a bug yet to be identified.
+    """
     D = img.shape[2]
     temp = np.empty(img.shape)
     for i in xrange(D):
@@ -113,10 +123,13 @@ def bug_guided_filter(img, p, r, eps):
 
 
 def depth_map(trans, beta):
+    """Generate depth map with provided transmission."""
     rval = -np.log(trans)/beta
     return rval / np.max(rval)
 
+
 def radiant_image(image, atmosphere, t, thres):
+    """Get the resultant image after evaluating all 3 components of haze."""
     R,C,D = image.shape
     temp = np.empty(image.shape)
     t[t < thres] = thres
@@ -127,7 +140,10 @@ def radiant_image(image, atmosphere, t, thres):
     return b
 
 
-def perform(orig_img, window = 50, top_percent = 0.1, thres_haze = 0.1, omega = 0.95, beta = 1.0, radius = 100, eps = 0.001):
+def perform(orig_img, window = 50, top_percent = 0.1,
+            thres_haze = 0.1, omega = 0.95, beta = 1.0,
+            radius = 100, eps = 0.001):
+    """Evaluate unhazed image from the provided hazy image."""
     img_gray = cv2.cvtColor(orig_img, cv2.COLOR_BGR2GRAY)
     img = np.asarray(orig_img, dtype = np.float64)
     img_norm = (img_gray - img_gray.mean())/(img_gray.max() - img_gray.min())
@@ -143,10 +159,13 @@ def perform(orig_img, window = 50, top_percent = 0.1, thres_haze = 0.1, omega = 
     # t_refined = fast_guided_filter(img, t_estimate, radius, eps)
     unhazed = radiant_image(img, A, t_refined, thres_haze)
     depthmap = depth_map(t_refined, beta)
-    return [np.array(x, dtype = np.uint8) for x in [t_estimate * 255, t_refined * 255, unhazed, dark, depthmap * 255] ]
+    return [np.array(x, dtype = np.uint8) for x in
+            [t_estimate * 255, t_refined * 255,
+             unhazed, dark, depthmap * 255] ]
 
 
 def run_file(fileName):
+    """Rune dehazing operation on provided image file."""
     frame = cv2.imread(fileName)
     [trans, trans_refined, radiance, dark, depthmap] = perform(frame)
     # cv2.imshow('original.jpg', frame)
@@ -157,7 +176,9 @@ def run_file(fileName):
     cv2.imwrite('depthmap.jpg', depthmap)
     cv2.waitKey(0)
 
+
 def run_vid(fileName):
+    """Run dehazing operation on provided video file."""
     cap = cv2.VideoCapture(fileName)
     while(1):
         ret, img = cap.read()
@@ -166,5 +187,8 @@ def run_vid(fileName):
         cv2.imshow('unhazed', radiance)
         cv2.imshow('transmission', trans_refined)
         cv2.waitKey(30)
-# run_vid('vid.mp4')
-run_file('images/input.png')
+
+
+if __name__ == '__main':
+    # run_vid('vid.mp4')
+    run_file('images/input.png')
